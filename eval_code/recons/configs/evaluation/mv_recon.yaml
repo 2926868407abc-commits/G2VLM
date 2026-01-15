@@ -1,0 +1,25 @@
+# @package _global_
+
+defaults:
+  - override /data: mv_recon
+
+name: mv_recon
+
+eval_models:
+  - g2vlm
+
+eval_datasets:
+  - DTU
+  - ETH3D
+
+no_crop: True
+load_img_size: 512
+
+device: cuda
+
+verbose: False
+
+seed: 42
+
+
+save_suffix: null

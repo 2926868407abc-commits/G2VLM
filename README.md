@@ -51,6 +51,7 @@
     understanding tasks. For spatial reasoning questions, G<sup>2</sup>VLM can natively predict 3D geometry and employ interleaved reasoning for an answer.
 
 ## 📢 News
+- [2026-02-20] 🔥 Our work is accepted by CVPR 2026! 
 - [2026-01-14] We release the evaluation code for 3D reconstruction. Please refer to the eval readme [here](./eval_code/recons/README.md). 
 - [Coming!] 📝 We will release our training code in the [train folder](./train).
 - [Coming!] 📝 We will release the checkpoint of G<sup>2</sup>VLM-SR, a strong spatial reasoning model. Stay tuned! 

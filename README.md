@@ -155,9 +155,7 @@ If you find our work and this codebase helpful, please consider starring this re
       title={G$^2$VLM: Geometry Grounded Vision Language Model with Unified 3D Reconstruction and Spatial Reasoning}, 
       author={Wenbo Hu and Jingli Lin and Yilin Long and Yunlong Ran and Lihan Jiang and Yifan Wang and Chenming Zhu and Runsen Xu and Tai Wang and Jiangmiao Pang},
       year={2025},
-      eprint={2511.21688},
-      archivePrefix={arXiv},
-      primaryClass={cs.CV},
+      journal={arXiv preprint arXiv:2511.21688},
       url={https://arxiv.org/abs/2511.21688}, 
 }
 ```

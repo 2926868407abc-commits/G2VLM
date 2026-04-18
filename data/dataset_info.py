@@ -19,7 +19,7 @@ DATASET_INFO = {
     },
 
 	'recon_then_und':{
-		'spatial_data': {
+		'spatial_mix': {
 			'data_dir': 'your_data_path/g2vlm_example/joint_trainng/images',
 			'num_files': 10,
 			'num_total_samples': 1000,

@@ -49,7 +49,7 @@ class DataConfig:
         self.dino_max_num_patch_per_side = dino_max_num_patch_per_side
 
 
-class PackedDataset(torch.utils.data.IterableDataset):
+class PackedDatasetPerIter(torch.utils.data.IterableDataset):
     def __init__(
         self, 
         data_config, 
@@ -306,14 +306,20 @@ class PackedDataset(torch.utils.data.IterableDataset):
         return data
 
     def __iter__(self):
+
+        num_groups = len(self.dataset_iters)
+        ################## group weight ############
         total_weights = sum(self.grouped_weights)
         assert total_weights > 0.0
         group_cumprobs = [sum(self.grouped_weights[:i + 1]) / total_weights 
                         for i in range(len(self.grouped_weights))]
-        sequence_status = self.set_sequence_status()
-        batch_data_indexes = []
 
+        ##############################
         while True:
+            sequence_status = self.set_sequence_status()
+            batch_data_indexes = []
+            added_at_least_one = False
+    
             self.step_counter += 1
             step_seed = self.base_and_epoch_seed + self.step_counter
             step_rng = random.Random(step_seed)
@@ -328,64 +334,54 @@ class PackedDataset(torch.utils.data.IterableDataset):
                 2
             )      
 
-            # Ensure at least one sample from each group
-            if sequence_status['curr'] == 0:
-                for group_index, group_iter_names in enumerate(self.dataset_iters):
-                    group_iter = group_iter_names[0]
-                    group_name = group_iter_names[1]
-                    group_dataset = group_iter_names[2]  
-                    if self.is_mandatory[group_index]: #grouped means recon group.  
-                        while True:
-                            if group_name == "recon":
-                                group_dataset.set_random_image_num(random_image_num)
-                                group_dataset.set_random_aspect_ratio(random_aspect_ratio)
-                                group_dataset.set_step_rng(step_seed)
-                                sample = next(group_iter)
-                            else:
-                                sample = next(group_iter)
-                                
-                            if sample is None:
-                                continue
-                            num_tokens = sample['num_tokens'] + 2 * len(sample['sequence_plan']) 
-                            if num_tokens < self.max_num_tokens_per_sample:
-                                sequence_status = self.pack_sequence(sample, sequence_status)
-                                batch_data_indexes.append(sample['data_indexes'])
-                                break
-                            else:
-                                print(f"skip a sample with length {num_tokens}")
-                                continue
-
-            n = random.random()
+            n = step_rng.random() # Use the step_rng for reproducibility
             group_index = 0
             for i, cumprob in enumerate(group_cumprobs):
                 if n < cumprob:
                     group_index = i
                     break
-            sample = next(self.dataset_iters[group_index][0])
+            group_iter, group_name, group_dataset = self.dataset_iters[group_index]
 
-            num_tokens = sample['num_tokens'] + 2 * len(sample['sequence_plan'])
-            if num_tokens > self.max_num_tokens_per_sample:
-                print(f"skip a sample with length {num_tokens}")
-                continue
+            while True:
+                if group_name == "recon":
+                    group_dataset.set_random_image_num(random_image_num)
+                    group_dataset.set_random_aspect_ratio(random_aspect_ratio)
+                    group_dataset.set_step_rng(step_seed)
+                    sample = next(group_iter)
+                else:
+                    sample = next(group_iter)
+                    
+                if sample is None:
+                    continue
+                # if a sample is too long, skip it
+                num_tokens = sample['num_tokens'] + 2 * len(sample['sequence_plan']) 
 
-            if sequence_status['curr'] + num_tokens > self.max_num_tokens:
+                if num_tokens == 0 or num_tokens > self.max_num_tokens_per_sample:
+                    if num_tokens == 0:
+                        print(f"skip a sample with length 0")
+                    else:
+                        print(f"skip a sample with length {num_tokens} (exceeds max_per_sample)")
+                    continue
+            
+                if sequence_status['curr'] + num_tokens > self.max_num_tokens:
+                    if not added_at_least_one:
+                        print(f"skip a sample (length {num_tokens}) too large for an empty batch")
+                        continue
+                    else:
+                        break 
+
+                sequence_status = self.pack_sequence(sample, sequence_status)
+                batch_data_indexes.append(sample['data_indexes'])
+                added_at_least_one = True
+
+                if sequence_status['curr'] >= self.expected_num_tokens:
+                    break 
+
+            if added_at_least_one:
                 data = self.to_tensor(sequence_status)
                 data['batch_data_indexes'] = batch_data_indexes
                 yield data
-                sequence_status = self.set_sequence_status()
-                batch_data_indexes = []
-                continue
-
-            sequence_status = self.pack_sequence(sample, sequence_status)
-            batch_data_indexes.append(sample['data_indexes'])
-
-            if sequence_status['curr'] >= self.expected_num_tokens:
-                print(f"Yielding data exceed expected_num_tokens with length {sum(sequence_status['sample_lens'])}, num_tokens is {num_tokens}")
-                data = self.to_tensor(sequence_status)
-                data['batch_data_indexes'] = batch_data_indexes
-                yield data
-                sequence_status = self.set_sequence_status()
-                batch_data_indexes = []
+            
 
     def pack_sequence(self, sample, sequence_status):
         if 'image_tensor_list' in sample:

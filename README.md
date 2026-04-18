@@ -51,9 +51,9 @@
     understanding tasks. For spatial reasoning questions, G<sup>2</sup>VLM can natively predict 3D geometry and employ interleaved reasoning for an answer.
 
 ## 📢 News
+- [2026-04-18] 📝 We release our training code in the [train folder](./train). Please refer to our training instructions below.
 - [2026-02-20] 🔥 Our work is accepted by CVPR 2026! 
 - [2026-01-14] We release the evaluation code for 3D reconstruction. Please refer to the eval readme [here](./eval_code/recons/README.md). 
-- [Coming!] 📝 We will release our training code in the [train folder](./train).
 - [Coming!] 📝 We will release the checkpoint of G<sup>2</sup>VLM-SR, a strong spatial reasoning model. Stay tuned! 
 - [2025-11-27] 🔥 We release the example training data preprocessing code in the [data folder](./data).
 - [2025-11-27] 🔥 We release the inference code and the checkpoint of G<sup>2</sup>VLM.
@@ -144,6 +144,20 @@ python inference_chat.py --image_path <path/to/your/images> --question "user que
   * `--image_path`: Path to the image, if you want to specify the image. (Default: `examples/25_0.jpg`)
   * `--question`: Input question. (Default: `If the table (red point) is positioned at 2.6 meters, estimate the depth of the clothes (blue point).`)
   * `--save_path`: Path to save the output `.ply` point cloud. (Default: `examples/result.ply`)
+
+## 🔥 Training
+
+We provide pre-train and joint-train scripts in [scripts folder](./scripts)
+
+```bash
+# For pre-train of visual geometry expert only 
+bash scripts/pretrain.sh
+
+# For joint-train of semantic perception expert and optionally (freeze or train) visual geometry expert
+bash scripts/joint_train.sh
+```
+
+For finetuning or joint training, please edit the config file here [data/configs/joint_train.yaml](data/configs/joint_train.yaml). The actual data config is in this file [data/dataset_info.py](data/dataset_info.py) where you can edit the path to your dataset. 
 
 
 ## 🔗 Citation

@@ -89,8 +89,6 @@ class G2VLMConfig(PretrainedConfig):
         llm_config=None,
         vit_config=None,
         dino_config=None,
-        latent_patch_size=2,
-        max_latent_size=32,
         vit_max_num_patch_per_side=70,
         dino_max_num_patch_per_side=37,
         interpolate_pos=False,
@@ -104,8 +102,6 @@ class G2VLMConfig(PretrainedConfig):
         self.llm_config = llm_config
         self.vit_config = vit_config
         self.dino_config = dino_config
-        self.latent_patch_size = latent_patch_size
-        self.max_latent_size = max_latent_size
         self.vit_max_num_patch_per_side = vit_max_num_patch_per_side
         self.dino_max_num_patch_per_side = dino_max_num_patch_per_side
         self.interpolate_pos = interpolate_pos

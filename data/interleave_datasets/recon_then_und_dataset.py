@@ -229,6 +229,23 @@ class ReconthenUndIterableDataset(ParquetStandardIterableDataset, DistributedIte
                 extri_opencv = dino_meta['pose'] # 3 x 4 
                 extri_opencv = np.array(extri_opencv).reshape((4,4))
                 intri_opencv = np.array(dino_meta['intri'])[:3, :3] #3 x 3
+            elif dino_meta['scene_name'] == 'replica':
+                with Image.open(depth_path) as depth_img:
+                    depth_map = np.array(depth_img).astype(np.float32)
+                depth_map[~np.isfinite(depth_map)] = 0
+                valid_depth = depth_map[depth_map > 0]
+                if valid_depth.size > 0 and np.nanmax(valid_depth) > 100:
+                    depth_map = depth_map / 1000.0
+                if depth_map.shape[0] != image.shape[0] or depth_map.shape[1] != image.shape[1]:
+                    depth_map = cv2.resize(
+                        depth_map,
+                        (image.shape[1], image.shape[0]),
+                        interpolation=cv2.INTER_NEAREST,
+                    )
+
+                extri_opencv = dino_meta['pose']
+                extri_opencv = np.array(extri_opencv).reshape((4,4))
+                intri_opencv = np.array(dino_meta['intri'])[:3, :3]
             elif dino_meta['scene_name'] == 'structured3d': 
                 with Image.open(depth_path) as depth_img:
                     depth_map = np.array(depth_img).astype(np.int32) / 1000.0

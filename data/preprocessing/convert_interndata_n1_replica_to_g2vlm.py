@@ -1,0 +1,291 @@
+#!/usr/bin/env python3
+"""Convert InternData-N1 replica_d435i trajectories to G2VLM joint-train parquet."""
+
+import argparse
+import json
+import re
+from pathlib import Path
+
+import numpy as np
+import pyarrow as pa
+import pyarrow.parquet as pq
+
+
+INSTRUCTION_KEYS = (
+    "revised_sub_instruction",
+    "sub_instruction",
+    "sum_instruction",
+    "instruction",
+    "language_instruction",
+)
+
+
+def read_jsonl(path):
+    if not path.exists():
+        return []
+    records = []
+    with path.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                records.append(json.loads(line))
+    return records
+
+
+def matrix3_to_4x4(values):
+    mat = np.asarray(values, dtype=np.float32).reshape(3, 3)
+    out = np.eye(4, dtype=np.float32)
+    out[:3, :3] = mat
+    return out.reshape(-1).tolist()
+
+
+def matrix4(values):
+    return np.asarray(values, dtype=np.float32).reshape(4, 4).reshape(-1).tolist()
+
+
+def clamp_range(indexes, num_frames):
+    if not indexes or len(indexes) < 2:
+        return 0, num_frames - 1
+    start = max(0, min(int(indexes[0]), num_frames - 1))
+    end = max(0, min(int(indexes[1]), num_frames - 1))
+    if end < start:
+        start, end = end, start
+    return start, end
+
+
+def sample_frame_ids(start, end, frames_per_sample):
+    if end <= start:
+        return [start]
+    count = min(frames_per_sample, end - start + 1)
+    return sorted(set(np.linspace(start, end, count, dtype=np.int32).tolist()))
+
+
+def path_for_frame(scene_dir, episode_index, frame_index, kind):
+    if kind == "rgb":
+        root = scene_dir / "videos" / "chunk-000" / "observation.images.rgb"
+        suffixes = (".jpg", ".png")
+    else:
+        root = scene_dir / "videos" / "chunk-000" / "observation.images.depth"
+        suffixes = (".png", ".jpg")
+
+    stems = (
+        f"episode_{episode_index:06d}_{frame_index:03d}",
+        f"episode_{episode_index:06d}_{frame_index:06d}",
+        f"episode_{episode_index:06d}_{frame_index}",
+    )
+    for stem in stems:
+        for suffix in suffixes:
+            path = root / f"{stem}{suffix}"
+            if path.exists():
+                return str(path.resolve())
+    raise FileNotFoundError(f"Missing {kind} frame for episode={episode_index}, frame={frame_index}")
+
+
+def collect_task_records(scene_dir):
+    tasks = read_jsonl(scene_dir / "meta" / "tasks.jsonl")
+    by_index = {}
+    by_episode = {}
+    for task in tasks:
+        task_id = task.get("task_index", task.get("index", task.get("id")))
+        if task_id is not None:
+            by_index[task_id] = task
+        episode_index = task.get("episode_index")
+        if episode_index is not None:
+            by_episode.setdefault(int(episode_index), []).append(task)
+    return by_index, by_episode
+
+
+def resolve_episode_tasks(episode, tasks_by_index, tasks_by_episode):
+    episode_index = int(episode.get("episode_index", -1))
+    records = [episode]
+
+    for key in ("tasks", "task_indexes", "task_indices"):
+        value = episode.get(key)
+        if isinstance(value, list):
+            for item in value:
+                if isinstance(item, dict):
+                    records.append(item)
+                elif item in tasks_by_index:
+                    records.append(tasks_by_index[item])
+
+    for key in ("task_index", "task_id"):
+        value = episode.get(key)
+        if value in tasks_by_index:
+            records.append(tasks_by_index[value])
+
+    records.extend(tasks_by_episode.get(episode_index, []))
+    return records
+
+
+def instruction_candidates(episode, tasks_by_index, tasks_by_episode, num_frames):
+    seen = set()
+    candidates = []
+    for record in resolve_episode_tasks(episode, tasks_by_index, tasks_by_episode):
+        for key in INSTRUCTION_KEYS:
+            text = record.get(key)
+            if not text:
+                continue
+            if key.startswith("sub"):
+                range_keys = ("sub_indexes", "indexes", "frame_indexes")
+            elif key.startswith("sum"):
+                range_keys = ("sum_indexes", "indexes", "frame_indexes")
+            else:
+                range_keys = ("indexes", "frame_indexes", "sub_indexes", "sum_indexes")
+
+            indexes = None
+            for range_key in range_keys:
+                if record.get(range_key):
+                    indexes = record[range_key]
+                    break
+            start, end = clamp_range(indexes, num_frames)
+            dedup_key = (text, start, end)
+            if dedup_key in seen:
+                continue
+            seen.add(dedup_key)
+            candidates.append((text, start, end, key))
+    return candidates
+
+
+def build_answer(instruction, final_pose, final_action):
+    pose = np.asarray(final_pose, dtype=np.float32).reshape(4, 4)
+    action = np.asarray(final_action, dtype=np.float32).reshape(4, 4)
+    pose_xyz = pose[:3, 3].round(4).tolist()
+    action_xyz = action[:3, 3].round(4).tolist()
+    return (
+        f"The trajectory follows this instruction: {instruction}\n"
+        f"Final camera translation: {pose_xyz}.\n"
+        f"Final action translation: {action_xyz}."
+    )
+
+
+def convert_scene(scene_dir, frames_per_sample):
+    episodes = read_jsonl(scene_dir / "meta" / "episodes.jsonl")
+    episodes_by_index = {
+        int(item["episode_index"]): item
+        for item in episodes
+        if "episode_index" in item
+    }
+    tasks_by_index, tasks_by_episode = collect_task_records(scene_dir)
+
+    rows = []
+    data_files = sorted((scene_dir / "data" / "chunk-000").glob("episode_*.parquet"))
+    for parquet_path in data_files:
+        match = re.search(r"episode_(\d+)\.parquet$", parquet_path.name)
+        if not match:
+            continue
+        episode_index = int(match.group(1))
+        episode = episodes_by_index.get(episode_index, {"episode_index": episode_index})
+        table = pq.read_table(parquet_path)
+        frame_table = table.to_pydict()
+        num_frames = table.num_rows
+        if num_frames == 0:
+            continue
+
+        candidates = instruction_candidates(episode, tasks_by_index, tasks_by_episode, num_frames)
+        for task_idx, (instruction, start, end, source_key) in enumerate(candidates):
+            frame_ids = sample_frame_ids(start, end, frames_per_sample)
+            image_list = [path_for_frame(scene_dir, episode_index, idx, "rgb") for idx in frame_ids]
+            depth_list = [path_for_frame(scene_dir, episode_index, idx, "depth") for idx in frame_ids]
+            poses = [matrix4(frame_table["observation.camera_extrinsic"][idx]) for idx in frame_ids]
+            intrinsic = matrix3_to_4x4(frame_table["observation.camera_intrinsic"][frame_ids[0]])
+            final_idx = frame_ids[-1]
+            final_pose = frame_table["observation.camera_extrinsic"][final_idx]
+            final_action = frame_table["action"][final_idx]
+
+            question = (
+                "Given the RGB-D trajectory, camera poses, and the navigation instruction, "
+                f"infer the goal state. Instruction: {instruction}"
+            )
+            metadata = {
+                "type": "nav",
+                "id": f"{scene_dir.name}_episode_{episode_index:06d}_{task_idx:03d}",
+                "scene": scene_dir.name,
+                "episode_index": episode_index,
+                "frame_ids": frame_ids,
+                "instruction_source": source_key,
+            }
+            rows.append(
+                {
+                    "question": question,
+                    "answer": build_answer(instruction, final_pose, final_action),
+                    "scene_name": "replica",
+                    "dataset_name": "spar_interndata_n1_replica_d435i",
+                    "image_list": image_list,
+                    "depth_list": depth_list,
+                    "poses": poses,
+                    "intrinsic": intrinsic,
+                    "depth_intrinsic": intrinsic,
+                    "metadata": repr(metadata),
+                }
+            )
+    return rows
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--input-root",
+        default="/mnt/data/wangqq/G2VLM/data/InternData-N1-extracted/vln_n1/traj_data/replica_d435i",
+        help="Extracted replica_d435i root containing scene folders such as apartment_2.",
+    )
+    parser.add_argument(
+        "--output-root",
+        default="/mnt/data/wangqq/G2VLM/data/g2vlm_interndata_n1/replica_d435i",
+        help="Output root for converted G2VLM parquet files.",
+    )
+    parser.add_argument("--scenes", nargs="*", default=None)
+    parser.add_argument("--frames-per-sample", type=int, default=8)
+    parser.add_argument("--row-group-size", type=int, default=32)
+    parser.add_argument("--max-samples", type=int, default=0)
+    args = parser.parse_args()
+
+    input_root = Path(args.input_root)
+    output_root = Path(args.output_root)
+    parquet_dir = output_root / "parquets"
+    parquet_dir.mkdir(parents=True, exist_ok=True)
+
+    if args.scenes:
+        scene_dirs = [input_root / scene for scene in args.scenes]
+    else:
+        scene_dirs = sorted(path for path in input_root.iterdir() if path.is_dir())
+
+    rows = []
+    for scene_dir in scene_dirs:
+        if not (scene_dir / "meta" / "episodes.jsonl").exists():
+            continue
+        rows.extend(convert_scene(scene_dir, args.frames_per_sample))
+        if args.max_samples and len(rows) >= args.max_samples:
+            rows = rows[: args.max_samples]
+            break
+
+    if not rows:
+        raise RuntimeError(f"No rows converted from {input_root}")
+
+    parquet_path = (parquet_dir / "interndata_n1_replica_d435i.parquet").resolve()
+    table = pa.Table.from_pylist(rows)
+    pq.write_table(table, parquet_path, row_group_size=args.row_group_size)
+
+    num_row_groups = pq.ParquetFile(parquet_path).num_row_groups
+    parquet_info = {str(parquet_path): {"num_row_groups": num_row_groups}}
+    parquet_info_path = output_root / "parquet_info.json"
+    with parquet_info_path.open("w", encoding="utf-8") as f:
+        json.dump(parquet_info, f, indent=2)
+
+    dataset_info = {
+        "data_dir": str(parquet_dir.resolve()),
+        "num_files": 1,
+        "num_total_samples": len(rows),
+        "parquet_info_path": str(parquet_info_path.resolve()),
+    }
+    with (output_root / "dataset_info_snippet.json").open("w", encoding="utf-8") as f:
+        json.dump(dataset_info, f, indent=2)
+
+    print(f"Converted rows: {len(rows)}")
+    print(f"Parquet: {parquet_path}")
+    print(f"Parquet info: {parquet_info_path.resolve()}")
+    print("DATASET_INFO snippet:")
+    print(json.dumps(dataset_info, indent=2))
+
+
+if __name__ == "__main__":
+    main()

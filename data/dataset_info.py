@@ -25,6 +25,12 @@ DATASET_INFO = {
 			'num_total_samples': 1000,
 			"parquet_info_path": 'your_data_path/g2vlm_example/joint_trainng/parquet_info', # information of the parquet files
 		},
+		'intern_n1_replica_d435i': {
+			'data_dir': '/mnt/data/wangqq/G2VLM/data/g2vlm_interndata_n1/replica_d435i/parquets',
+			'num_files': 1,
+			'num_total_samples': 1,
+			"parquet_info_path": '/mnt/data/wangqq/G2VLM/data/g2vlm_interndata_n1/replica_d435i/parquet_info.json',
+		},
 	},
     
     'recon': {

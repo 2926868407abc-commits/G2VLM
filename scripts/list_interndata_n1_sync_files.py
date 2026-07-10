@@ -22,6 +22,7 @@ SYNC_FILES = [
     "scripts/prepare_interndata_n1_replica.sh",
     "scripts/resolve_hf_repo.py",
     "train/joint_train_unified_model.py",
+    "requirements.txt",
     "docs/interndata_n1_replica_training.md",
 ]
 

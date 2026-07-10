@@ -19,15 +19,24 @@ except AttributeError:
     lanczos = PIL.Image.LANCZOS
     bicubic = PIL.Image.BICUBIC
 
-import h5py
+try:
+    import h5py
+except ImportError:
+    h5py = None
 # from .frame_sampling_utils import 
 from .frame_sampling_utils import compute_ranking
 
 import torch.nn.functional as F
-from petrel_client.client import Client
+try:
+    from petrel_client.client import Client
+except ImportError:
+    Client = None
 from io import BytesIO
 import decimal
-import quaternion
+try:
+    import quaternion
+except ImportError:
+    quaternion = None
 import json
 import torch 
 import torchvision
@@ -39,7 +48,10 @@ import os.path as osp
 import pi3.utils.cropping as cropping
 from pathlib import Path
 from scipy.spatial.transform import Rotation
-import imageio.v2 as iio
+try:
+    import imageio.v2 as iio
+except ImportError:
+    iio = None
 
 
 def transform_depth(depthmap, camera_intrinsic):

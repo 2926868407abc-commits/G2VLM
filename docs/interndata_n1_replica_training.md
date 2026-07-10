@@ -23,6 +23,7 @@ Keep `huggingface_hub` compatible with `transformers==4.49.0`:
 
 ```bash
 python -m pip install --force-reinstall "huggingface_hub==0.29.1"
+python -m pip install easydict==1.13 h5py imageio numpy-quaternion omegaconf plyfile prettytable timm
 ```
 
 ## 2. Required Files To Sync

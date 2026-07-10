@@ -25,7 +25,10 @@ import torch
 from tqdm.auto import tqdm
 import cv2
 import torchvision
-import open3d as o3d  # Optional but recommended for .ply saving (install with `pip install open3d`)
+try:
+    import open3d as o3d  # Optional; only needed when saving .ply visualizations.
+except ImportError:
+    o3d = None
 import torch.nn.functional as F
 
 
@@ -128,6 +131,9 @@ def save_ply_visualization(
     Saves a PLY visualization of the world points and images.
     Args:
     """
+    if o3d is None:
+        raise ImportError("open3d is required to save .ply visualizations. Install it with: pip install open3d")
+
     pred_dict = pred_dict.copy()
     for key in pred_dict.keys():
         if isinstance(pred_dict[key], torch.Tensor):

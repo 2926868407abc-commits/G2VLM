@@ -89,10 +89,15 @@ def collect_task_records(scene_dir):
         task_id = task.get("task_index", task.get("index", task.get("id")))
         if task_id is not None:
             by_index[task_id] = task
+            by_index[str(task_id)] = task
+            try:
+                by_index[int(task_id)] = task
+            except (TypeError, ValueError):
+                pass
         episode_index = task.get("episode_index")
         if episode_index is not None:
             by_episode.setdefault(int(episode_index), []).append(task)
-    return by_index, by_episode
+    return by_index, by_episode, tasks
 
 
 def resolve_episode_tasks(episode, tasks_by_index, tasks_by_episode):
@@ -112,15 +117,17 @@ def resolve_episode_tasks(episode, tasks_by_index, tasks_by_episode):
         value = episode.get(key)
         if value in tasks_by_index:
             records.append(tasks_by_index[value])
+        elif str(value) in tasks_by_index:
+            records.append(tasks_by_index[str(value)])
 
     records.extend(tasks_by_episode.get(episode_index, []))
     return records
 
 
-def instruction_candidates(episode, tasks_by_index, tasks_by_episode, num_frames):
+def instruction_candidates_from_records(records, num_frames):
     seen = set()
     candidates = []
-    for record in resolve_episode_tasks(episode, tasks_by_index, tasks_by_episode):
+    for record in records:
         for key in INSTRUCTION_KEYS:
             text = record.get(key)
             if not text:
@@ -146,6 +153,21 @@ def instruction_candidates(episode, tasks_by_index, tasks_by_episode, num_frames
     return candidates
 
 
+def instruction_candidates(episode, tasks_by_index, tasks_by_episode, all_tasks, num_frames):
+    candidates = instruction_candidates_from_records(
+        resolve_episode_tasks(episode, tasks_by_index, tasks_by_episode),
+        num_frames,
+    )
+    if candidates:
+        return candidates
+
+    episode_index = int(episode.get("episode_index", -1))
+    if 0 <= episode_index < len(all_tasks):
+        return instruction_candidates_from_records([all_tasks[episode_index]], num_frames)
+
+    return []
+
+
 def build_answer(instruction, final_pose, final_action):
     pose = np.asarray(final_pose, dtype=np.float32).reshape(4, 4)
     action = np.asarray(final_action, dtype=np.float32).reshape(4, 4)
@@ -165,7 +187,7 @@ def convert_scene(scene_dir, frames_per_sample):
         for item in episodes
         if "episode_index" in item
     }
-    tasks_by_index, tasks_by_episode = collect_task_records(scene_dir)
+    tasks_by_index, tasks_by_episode, all_tasks = collect_task_records(scene_dir)
 
     rows = []
     data_files = sorted((scene_dir / "data" / "chunk-000").glob("episode_*.parquet"))
@@ -181,7 +203,12 @@ def convert_scene(scene_dir, frames_per_sample):
         if num_frames == 0:
             continue
 
-        candidates = instruction_candidates(episode, tasks_by_index, tasks_by_episode, num_frames)
+        candidates = instruction_candidates(episode, tasks_by_index, tasks_by_episode, all_tasks, num_frames)
+        if not candidates and episode_index == 0:
+            print(
+                f"Warning: no instruction candidates found in {scene_dir}. "
+                "Check meta/episodes.jsonl and meta/tasks.jsonl schema."
+            )
         for task_idx, (instruction, start, end, source_key) in enumerate(candidates):
             frame_ids = sample_frame_ids(start, end, frames_per_sample)
             image_list = [path_for_frame(scene_dir, episode_index, idx, "rgb") for idx in frame_ids]

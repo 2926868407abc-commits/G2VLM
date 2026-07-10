@@ -56,6 +56,50 @@ def mark_step_start(step):
     return None
 
 
+def attach_first_nan_observer(model, batch_ref=None, job_id=None):
+    """Optionally attach a lightweight first-NaN forward observer.
+
+    The original training entrypoints call this helper unconditionally, but the
+    observer is only needed while debugging numerical issues. Keep the default
+    path as a no-op so normal training is not slowed down by per-module hooks.
+    Set G2VLM_ENABLE_NAN_OBSERVER=1 to enable it.
+    """
+    if os.environ.get("G2VLM_ENABLE_NAN_OBSERVER", "0") != "1":
+        return []
+
+    state = {"reported": False}
+    handles = []
+
+    def contains_nonfinite(value):
+        if torch.is_tensor(value):
+            return torch.is_floating_point(value) and not torch.isfinite(value).all()
+        if isinstance(value, dict):
+            return any(contains_nonfinite(v) for v in value.values())
+        if isinstance(value, (list, tuple)):
+            return any(contains_nonfinite(v) for v in value)
+        return False
+
+    def make_hook(module_name):
+        def hook(_module, _inputs, output):
+            if state["reported"] or not contains_nonfinite(output):
+                return
+            state["reported"] = True
+            rank = dist.get_rank() if dist.is_initialized() else 0
+            print(
+                f"[Rank {rank}] Non-finite tensor first observed at module "
+                f"{module_name}; job_id={job_id}",
+                flush=True,
+            )
+        return hook
+
+    for name, module in model.named_modules():
+        if any(module.children()):
+            continue
+        handles.append(module.register_forward_hook(make_hook(name)))
+
+    return handles
+
+
 def save_latest_checkpoints(ckpt_dir, keep_latest=2):
     """
     Keeps only the latest 'keep_latest' checkpoints in ckpt_dir.

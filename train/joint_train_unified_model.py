@@ -47,6 +47,7 @@ from train.fsdp_utils import (
     fsdp_wrapper,
     init_fsdp_log_file,
     mark_step_start,
+    attach_first_nan_observer,
     fsdp_ema_setup,
     fsdp_ema_update,
     save_latest_checkpoints,

@@ -4,7 +4,7 @@ import os
 from PIL import Image, ImageFile, PngImagePlugin
 from idna import intranges_contain
 
-from .interleave_t2i_dataset import InterleavedBaseIterableDataset, ParquetStandardIterableDataset
+from .interleave_dataset import InterleavedBaseIterableDataset, ParquetStandardIterableDataset
 from ..data_utils import pil_img2rgb, apply_template_qwenvl2, apply_template_qwenvl2_reconThenUnd
 from ..distributed_iterable_dataset import DistributedIterableDataset
 from ..dataset_utils_vggt import *

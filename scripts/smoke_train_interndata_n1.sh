@@ -72,6 +72,8 @@ if "intern_n1_replica_d435i" not in dataset_info_text:
     raise SystemExit("dataset_info.py is missing intern_n1_replica_d435i")
 
 loader_text = (repo / "data" / "interleave_datasets" / "recon_then_und_dataset.py").read_text()
+if "from .interleave_dataset import" not in loader_text:
+    raise SystemExit("recon_then_und_dataset.py should import from .interleave_dataset; sync the latest file")
 if "scene_name'] == 'replica'" not in loader_text and 'scene_name"] == "replica"' not in loader_text:
     raise SystemExit("recon_then_und_dataset.py is missing replica depth support")
 if 'metadata[\'type\'] == "nav"' not in loader_text and 'metadata["type"] == "nav"' not in loader_text:

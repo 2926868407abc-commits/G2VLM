@@ -62,22 +62,30 @@ def sample_frame_ids(start, end, frames_per_sample):
 
 def path_for_frame(scene_dir, episode_index, frame_index, kind):
     if kind == "rgb":
-        root = scene_dir / "videos" / "chunk-000" / "observation.images.rgb"
+        base_root = scene_dir / "videos" / "chunk-000" / "observation.images.rgb"
+        glob_pattern = "chunk-*/observation.images.rgb"
         suffixes = (".jpg", ".png")
     else:
-        root = scene_dir / "videos" / "chunk-000" / "observation.images.depth"
+        base_root = scene_dir / "videos" / "chunk-000" / "observation.images.depth"
+        glob_pattern = "chunk-*/observation.images.depth"
         suffixes = (".png", ".jpg")
+
+    roots = [base_root]
+    videos_root = scene_dir / "videos"
+    if videos_root.exists():
+        roots.extend(path for path in sorted(videos_root.glob(glob_pattern)) if path != base_root)
 
     stems = (
         f"episode_{episode_index:06d}_{frame_index:03d}",
         f"episode_{episode_index:06d}_{frame_index:06d}",
         f"episode_{episode_index:06d}_{frame_index}",
     )
-    for stem in stems:
-        for suffix in suffixes:
-            path = root / f"{stem}{suffix}"
-            if path.exists():
-                return str(path.resolve())
+    for root in roots:
+        for stem in stems:
+            for suffix in suffixes:
+                path = root / f"{stem}{suffix}"
+                if path.exists():
+                    return str(path.resolve())
     raise FileNotFoundError(f"Missing {kind} frame for episode={episode_index}, frame={frame_index}")
 
 
@@ -168,6 +176,22 @@ def instruction_candidates(episode, tasks_by_index, tasks_by_episode, all_tasks,
     return []
 
 
+def discover_scene_dirs(input_root, requested_scenes):
+    if requested_scenes:
+        scene_dirs = []
+        for scene in requested_scenes:
+            direct = input_root / scene
+            if (direct / "meta" / "episodes.jsonl").exists():
+                scene_dirs.append(direct)
+                continue
+
+            matches = sorted(input_root.rglob(f"{scene}/meta/episodes.jsonl"))
+            scene_dirs.extend(path.parent.parent for path in matches)
+        return sorted(set(scene_dirs))
+
+    return sorted({path.parent.parent for path in input_root.rglob("meta/episodes.jsonl")})
+
+
 def build_answer(instruction, final_pose, final_action):
     pose = np.asarray(final_pose, dtype=np.float32).reshape(4, 4)
     action = np.asarray(final_action, dtype=np.float32).reshape(4, 4)
@@ -190,7 +214,11 @@ def convert_scene(scene_dir, frames_per_sample):
     tasks_by_index, tasks_by_episode, all_tasks = collect_task_records(scene_dir)
 
     rows = []
-    data_files = sorted((scene_dir / "data" / "chunk-000").glob("episode_*.parquet"))
+    data_files = sorted((scene_dir / "data").rglob("episode_*.parquet"))
+    print(
+        f"[convert] scene={scene_dir} episodes={len(episodes)} "
+        f"tasks={len(all_tasks)} parquet_files={len(data_files)}"
+    )
     for parquet_path in data_files:
         match = re.search(r"episode_(\d+)\.parquet$", parquet_path.name)
         if not match:
@@ -211,8 +239,12 @@ def convert_scene(scene_dir, frames_per_sample):
             )
         for task_idx, (instruction, start, end, source_key) in enumerate(candidates):
             frame_ids = sample_frame_ids(start, end, frames_per_sample)
-            image_list = [path_for_frame(scene_dir, episode_index, idx, "rgb") for idx in frame_ids]
-            depth_list = [path_for_frame(scene_dir, episode_index, idx, "depth") for idx in frame_ids]
+            try:
+                image_list = [path_for_frame(scene_dir, episode_index, idx, "rgb") for idx in frame_ids]
+                depth_list = [path_for_frame(scene_dir, episode_index, idx, "depth") for idx in frame_ids]
+            except FileNotFoundError as exc:
+                print(f"Warning: skip episode {episode_index} task {task_idx}: {exc}")
+                continue
             poses = [matrix4(frame_table["observation.camera_extrinsic"][idx]) for idx in frame_ids]
             intrinsic = matrix3_to_4x4(frame_table["observation.camera_intrinsic"][frame_ids[0]])
             final_idx = frame_ids[-1]
@@ -271,16 +303,18 @@ def main():
     parquet_dir = output_root / "parquets"
     parquet_dir.mkdir(parents=True, exist_ok=True)
 
-    if args.scenes:
-        scene_dirs = [input_root / scene for scene in args.scenes]
-    else:
-        scene_dirs = sorted(path for path in input_root.iterdir() if path.is_dir())
+    scene_dirs = discover_scene_dirs(input_root, args.scenes)
+    print(f"[convert] discovered scene dirs: {len(scene_dirs)}")
+    for scene_dir in scene_dirs:
+        print(f"[convert] will process: {scene_dir}")
 
     rows = []
     for scene_dir in scene_dirs:
         if not (scene_dir / "meta" / "episodes.jsonl").exists():
             continue
+        before = len(rows)
         rows.extend(convert_scene(scene_dir, args.frames_per_sample))
+        print(f"[convert] rows from {scene_dir.name}: {len(rows) - before}")
         if args.max_samples and len(rows) >= args.max_samples:
             rows = rows[: args.max_samples]
             break

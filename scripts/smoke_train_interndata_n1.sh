@@ -56,9 +56,11 @@ if major >= 1:
     )
 
 import transformers
+from easydict import EasyDict
 from pi3.utils.geometry import depthmap_to_absolute_camera_coordinates
 
 print("transformers:", transformers.__version__)
+print("easydict import: ok", EasyDict.__name__)
 print("pi3 geometry import: ok", depthmap_to_absolute_camera_coordinates.__name__)
 
 for path in [*required_repo_files, parquet_path, parquet_info]:
@@ -78,6 +80,15 @@ if 'metadata[\'type\'] == "nav"' not in loader_text and 'metadata["type"] == "na
 draw_marker_text = (repo / "data" / "interleave_datasets" / "draw_marker.py").read_text()
 if "draw_goal_on_input" not in draw_marker_text:
     raise SystemExit("draw_marker.py is missing the nav goal-marker leakage guard")
+
+train_text = (repo / "train" / "joint_train_unified_model.py").read_text()
+if "total_mse_tokens = torch.tensor(0" not in train_text:
+    raise SystemExit("joint_train_unified_model.py is missing the total_mse_tokens smoke-run fix")
+
+launch_text = (repo / "scripts" / "joint_train_single_node_interndata_n1.sh").read_text()
+for needle in ["PYTHONPATH", "TRAIN_ARGS=(", "resolve_hf_repo.py"]:
+    if needle not in launch_text:
+        raise SystemExit(f"joint_train_single_node_interndata_n1.sh is missing {needle}; sync the latest script")
 
 table = pq.read_table(parquet_path)
 print("converted rows:", table.num_rows)

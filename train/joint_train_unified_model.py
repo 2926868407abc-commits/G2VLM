@@ -718,6 +718,9 @@ def main():
                 loss_dict, predictions = fsdp_model(**data)
 
             loss = 0
+            # This joint fine-tune path does not use an MSE token objective, but
+            # the shared logging schema expects the field to exist.
+            total_mse_tokens = torch.tensor(0, device=device)
             ce = loss_dict["ce"]
             if ce is not None:
                 if training_args.ce_loss_dino:

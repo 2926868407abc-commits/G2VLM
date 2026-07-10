@@ -36,8 +36,6 @@ from modeling.g2vlm import (
 )
 from modeling.qwen2vl.modeling_qwen2_vl import Qwen2VisionTransformerPretrainedModel
 from modeling.qwen2vl.configuration_qwen2_vl import Qwen2VLVisionConfig
-from modeling.dinov3.configuration_dinov3_vit import DINOv3ViTConfig
-from modeling.dinov3.dinov3_navit import DINOv3ViTModel
 
 from modeling.qwen2 import Qwen2Tokenizer
 from train.train_utils import create_logger, get_latest_ckpt
@@ -49,6 +47,13 @@ from train.fsdp_utils import (
 
 NUMS_GPUS=64
 # MAX_STEPS_PER_EPOCH = max(10504501 // (8 * NUMS_GPUS ), 1)
+
+
+def load_dinov3_classes():
+    from modeling.dinov3.configuration_dinov3_vit import DINOv3ViTConfig
+    from modeling.dinov3.dinov3_model import DINOv3ViTModel
+
+    return DINOv3ViTConfig, DINOv3ViTModel
 
 
 @dataclass
@@ -438,6 +443,8 @@ def main():
             vit_model = Qwen2VisionTransformerPretrainedModel.from_pretrained(model_args.vit_path, config=vit_config)
     
     if training_args.visual_recon:  
+        if training_args.use_dinov3:
+            DINOv3ViTConfig, DINOv3ViTModel = load_dinov3_classes()
         if training_args.finetune_dino_from_hf:
             if training_args.use_dinov3:
                 dino_config = DINOv3ViTConfig.from_json_file(os.path.join(model_args.dino_path, "config.json"))

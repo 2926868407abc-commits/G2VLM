@@ -441,7 +441,8 @@ class G2VLM(PreTrainedModel):
 
 
         vggt_loss_dict = None
-        dl_loss = 0 
+        mse = last_hidden_state.new_tensor(0.0)
+        dl_loss = last_hidden_state.new_tensor(0.0)
         details = {}
         predictions = {}
   

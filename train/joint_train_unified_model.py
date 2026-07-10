@@ -904,12 +904,12 @@ def main():
 
             epoch_step += 1
               
-            if curr_step >= training_args.total_steps + 1: 
+            if curr_step >= training_args.total_steps:
                 logger.info("Done!")
                 if dist.get_rank() == 0:
                     wandb.finish()
                 dist.destroy_process_group()
-                sys.exit(1)
+                return
 
 if __name__ == "__main__":
     main()

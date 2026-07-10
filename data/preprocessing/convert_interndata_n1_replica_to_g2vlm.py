@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
+from PIL import Image
 
 
 INSTRUCTION_KEYS = (
@@ -41,6 +42,83 @@ def matrix3_to_4x4(values):
 
 def matrix4(values):
     return np.asarray(values, dtype=np.float32).reshape(4, 4).reshape(-1).tolist()
+
+
+def matrix4_np(values):
+    return np.asarray(values, dtype=np.float32).reshape(4, 4)
+
+
+def camera_center_candidates(pose_values):
+    pose = matrix4_np(pose_values)
+    candidates = [pose[:3, 3]]
+    try:
+        rot = pose[:3, :3]
+        trans = pose[:3, 3]
+        candidates.append(-(rot.T @ trans))
+    except Exception:
+        pass
+    return candidates
+
+
+def project_world_point_to_image(point_world, pose_values, intrinsic_values, width, height):
+    pose = matrix4_np(pose_values)
+    point_h = np.ones(4, dtype=np.float32)
+    point_h[:3] = np.asarray(point_world, dtype=np.float32)
+    intrinsic = np.asarray(intrinsic_values, dtype=np.float32).reshape(3, 3)
+
+    camera_points = []
+    try:
+        camera_points.append(np.linalg.inv(pose) @ point_h)
+    except np.linalg.LinAlgError:
+        pass
+    camera_points.append(pose @ point_h)
+
+    best = None
+    for camera_point in camera_points:
+        x, y, z = camera_point[:3]
+        if not np.isfinite(camera_point[:3]).all() or abs(float(z)) < 1e-6:
+            continue
+        if z < 0:
+            continue
+        u = intrinsic[0, 0] * x / z + intrinsic[0, 2]
+        v = intrinsic[1, 1] * y / z + intrinsic[1, 2]
+        if not np.isfinite([u, v]).all():
+            continue
+        inside = 0 <= u < width and 0 <= v < height
+        score = 1 if inside else 0
+        candidate = (score, float(u), float(v))
+        if best is None or candidate[0] > best[0]:
+            best = candidate
+
+    if best is None:
+        return None
+
+    _, u, v = best
+    u = max(0.0, min(float(width - 1), u))
+    v = max(0.0, min(float(height - 1), v))
+    return [round(u / max(width, 1) * 1000), round(v / max(height, 1) * 1000)]
+
+
+def infer_goal_pixel(frame_table, frame_ids, image_list):
+    final_idx = frame_ids[-1]
+    target_points = []
+    target_points.extend(camera_center_candidates(frame_table["observation.camera_extrinsic"][final_idx]))
+    if "action" in frame_table:
+        target_points.extend(camera_center_candidates(frame_table["action"][final_idx]))
+
+    for local_idx, frame_idx in enumerate(frame_ids):
+        if local_idx == len(frame_ids) - 1:
+            continue
+        with Image.open(image_list[local_idx]) as image:
+            width, height = image.size
+        pose = frame_table["observation.camera_extrinsic"][frame_idx]
+        intrinsic = frame_table["observation.camera_intrinsic"][frame_idx]
+        for point_world in target_points:
+            goal_pixel = project_world_point_to_image(point_world, pose, intrinsic, width, height)
+            if goal_pixel is not None:
+                return goal_pixel, local_idx, "projected_final_pose"
+
+    return [500, 500], len(image_list) - 1, "final_frame_center"
 
 
 def clamp_range(indexes, num_frames):
@@ -192,13 +270,15 @@ def discover_scene_dirs(input_root, requested_scenes):
     return sorted({path.parent.parent for path in input_root.rglob("meta/episodes.jsonl")})
 
 
-def build_answer(instruction, final_pose, final_action):
+def build_answer(instruction, final_pose, final_action, goal_pixel, goal_pixel_img_idx):
     pose = np.asarray(final_pose, dtype=np.float32).reshape(4, 4)
     action = np.asarray(final_action, dtype=np.float32).reshape(4, 4)
     pose_xyz = pose[:3, 3].round(4).tolist()
     action_xyz = action[:3, 3].round(4).tolist()
     return (
         f"The trajectory follows this instruction: {instruction}\n"
+        f"Pixel goal: image_index={goal_pixel_img_idx}, x={goal_pixel[0]}, y={goal_pixel[1]} "
+        "(normalized to 0-1000).\n"
         f"Final camera translation: {pose_xyz}.\n"
         f"Final action translation: {action_xyz}."
     )
@@ -250,10 +330,13 @@ def convert_scene(scene_dir, frames_per_sample):
             final_idx = frame_ids[-1]
             final_pose = frame_table["observation.camera_extrinsic"][final_idx]
             final_action = frame_table["action"][final_idx]
+            goal_pixel, goal_pixel_img_idx, goal_pixel_source = infer_goal_pixel(frame_table, frame_ids, image_list)
 
             question = (
                 "Given the RGB-D trajectory, camera poses, and the navigation instruction, "
-                f"infer the goal state. Instruction: {instruction}"
+                "infer the final navigation goal as a pixel coordinate. "
+                "Return the target image index and the normalized x,y pixel goal. "
+                f"Instruction: {instruction}"
             )
             metadata = {
                 "type": "nav",
@@ -262,11 +345,14 @@ def convert_scene(scene_dir, frames_per_sample):
                 "episode_index": episode_index,
                 "frame_ids": frame_ids,
                 "instruction_source": source_key,
+                "goal_pixel": [goal_pixel],
+                "goal_pixel_img_idx": [goal_pixel_img_idx],
+                "goal_pixel_source": goal_pixel_source,
             }
             rows.append(
                 {
                     "question": question,
-                    "answer": build_answer(instruction, final_pose, final_action),
+                    "answer": build_answer(instruction, final_pose, final_action, goal_pixel, goal_pixel_img_idx),
                     "scene_name": "replica",
                     "dataset_name": "spar_interndata_n1_replica_d435i",
                     "image_list": image_list,

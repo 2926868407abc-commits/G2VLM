@@ -11,7 +11,11 @@ export PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:Tr
 export MKL_THREADING_LAYER=${MKL_THREADING_LAYER:-GNU}
 export HYDRA_FULL_ERROR=${HYDRA_FULL_ERROR:-1}
 export NCCL_ASYNC_ERROR_HANDLING=${NCCL_ASYNC_ERROR_HANDLING:-1}
-export PYTHONPATH="${REPO_ROOT}:${PYTHONPATH:-}"
+export PYTHONPATH="${REPO_ROOT}:${REPO_ROOT}/modeling:${PYTHONPATH:-}"
+export DATA_ROOT=${DATA_ROOT:-/mnt/data/wangqq/G2VLM/data}
+export HF_HOME=${HF_HOME:-${DATA_ROOT}/.cache/huggingface}
+export HF_HUB_ETAG_TIMEOUT=${HF_HUB_ETAG_TIMEOUT:-120}
+export HF_HUB_DOWNLOAD_TIMEOUT=${HF_HUB_DOWNLOAD_TIMEOUT:-120}
 
 GPUS_PER_NODE=${GPUS_PER_NODE:-4}
 
@@ -22,6 +26,19 @@ TOTAL_STEPS=${TOTAL_STEPS:-1000}
 SAVE_EVERY=${SAVE_EVERY:-200}
 WARMUP_STEPS=${WARMUP_STEPS:-50}
 NUM_WORKERS=${NUM_WORKERS:-2}
+
+MODEL_PATH=$(python scripts/resolve_hf_repo.py \
+    --repo-or-path "${MODEL_PATH}" \
+    --local-root "${DATA_ROOT}/models" \
+    --mode config \
+    --required text_config.json vit_config.json dino_config.json)
+PRETRAINED_CHECKPOINT=$(python scripts/resolve_hf_repo.py \
+    --repo-or-path "${PRETRAINED_CHECKPOINT}" \
+    --local-root "${DATA_ROOT}/models" \
+    --mode full \
+    --required model.safetensors)
+echo "[train] MODEL_PATH=${MODEL_PATH}"
+echo "[train] PRETRAINED_CHECKPOINT=${PRETRAINED_CHECKPOINT}"
 
 name="g2vlm_interndata_n1_replica_${GPUS_PER_NODE}g_$(date +%Y%m%d_%H%M%S)"
 output_dir="./checkpoints/${name}/"

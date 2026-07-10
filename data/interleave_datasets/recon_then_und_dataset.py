@@ -475,7 +475,6 @@ class ReconthenUndIterableDataset(ParquetStandardIterableDataset, DistributedIte
                     "appearance_order",
                     "room_size",
                     "obj_count",
-                    "nav",
                 }
                 if metadata['type'] in image_types:
                     for i, img_path in enumerate(images_list):
@@ -489,6 +488,8 @@ class ReconthenUndIterableDataset(ParquetStandardIterableDataset, DistributedIte
                     images = [Image.open(p).convert('RGB') for p in images_list]
                     self.draw_image(images, metadata)
                     vit_images_list = images
+                elif metadata['type'] == "nav":
+                    vit_images_list = [Image.open(p).convert("RGB") for p in images_list]
                     
                 raw_images = vit_images_list
             except Exception as e:

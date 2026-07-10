@@ -431,7 +431,27 @@ def draw_camera_motion_infer(images, data_entry):
     pass
 
 def draw_nav(images, data_entry):
-    pass
+    if not data_entry.get("draw_goal_on_input", False) or "goal_pixel" not in data_entry:
+        return
+
+    image_idx = data_entry.get("goal_pixel_img_idx", [len(images) - 1])
+    if isinstance(image_idx, (list, tuple, np.ndarray)):
+        image_idx = image_idx[0]
+    image_idx = int(max(0, min(len(images) - 1, image_idx)))
+
+    image = images[image_idx]
+    if not isinstance(image, Image.Image):
+        image = Image.fromarray(image)
+
+    point = scale_point(data_entry["goal_pixel"], image.width, image.height)
+    x, y = tuple(map(int, point))
+    radius = max(8, min(image.width, image.height) // 35)
+    draw = ImageDraw.Draw(image)
+    draw.ellipse([x - radius - 3, y - radius - 3, x + radius + 3, y + radius + 3], fill="white")
+    draw.ellipse([x - radius, y - radius, x + radius, y + radius], fill="lime")
+    draw.line([x - radius * 2, y, x + radius * 2, y], fill="black", width=max(2, radius // 4))
+    draw.line([x, y - radius * 2, x, y + radius * 2], fill="black", width=max(2, radius // 4))
+    images[image_idx] = image
 
 def draw_obj_count(images, data_entry):
     pass

@@ -42,6 +42,20 @@ import torch.distributed.checkpoint as dcp
 from torch.distributed.checkpoint import FileSystemWriter
 from torch.distributed.checkpoint import FileSystemReader
 
+
+def init_fsdp_log_file(log_dir="./logs", world_size=1):
+    os.makedirs(log_dir, exist_ok=True)
+    path = os.path.join(log_dir, f"fsdp_world{world_size}.log")
+    if dist.is_initialized() and dist.get_rank() == 0:
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(f"[{datetime.now().isoformat()}] FSDP run start world_size={world_size}\n")
+    return path
+
+
+def mark_step_start(step):
+    return None
+
+
 def save_latest_checkpoints(ckpt_dir, keep_latest=2):
     """
     Keeps only the latest 'keep_latest' checkpoints in ckpt_dir.

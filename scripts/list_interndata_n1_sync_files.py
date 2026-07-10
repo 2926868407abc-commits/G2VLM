@@ -23,6 +23,7 @@ SYNC_FILES = [
     "scripts/resolve_hf_repo.py",
     "train/joint_train_unified_model.py",
     "train/pretrain_unified_model.py",
+    "train/fsdp_utils.py",
     "g2vlm_utils.py",
     "requirements.txt",
     "docs/interndata_n1_replica_training.md",

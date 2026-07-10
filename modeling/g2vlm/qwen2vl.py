@@ -1234,6 +1234,8 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
             )
 
         all_hidden_states = () if output_hidden_states else None
+        if output_hidden_states and intermediate_layers is None:
+            intermediate_layers = (len(self.layers) - 1,)
 
         for idx_l, decoder_layer in enumerate(self.layers):
             packed_sequence = decoder_layer(
@@ -1302,6 +1304,9 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
                     packed_text_indexes=packed_text_indexes,
                 )
         all_hidden_states = () if output_hidden_states else None
+        if output_hidden_states and intermediate_layers is None:
+            intermediate_layers = (len(self.layers) - 1,)
+
         for idx_l, decoder_layer in enumerate(self.layers):
             packed_query_sequence, past_key_values = decoder_layer(
                 packed_query_sequence=packed_query_sequence,

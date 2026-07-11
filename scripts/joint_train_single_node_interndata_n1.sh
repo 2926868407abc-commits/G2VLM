@@ -26,6 +26,10 @@ TOTAL_STEPS=${TOTAL_STEPS:-1000}
 SAVE_EVERY=${SAVE_EVERY:-200}
 WARMUP_STEPS=${WARMUP_STEPS:-50}
 NUM_WORKERS=${NUM_WORKERS:-2}
+EXPECTED_NUM_TOKENS=${EXPECTED_NUM_TOKENS:-40960}
+MAX_NUM_TOKENS=${MAX_NUM_TOKENS:-40960}
+MAX_NUM_TOKENS_PER_SAMPLE=${MAX_NUM_TOKENS_PER_SAMPLE:-40960}
+USE_FLEX=${USE_FLEX:-True}
 
 MODEL_PATH=$(python scripts/resolve_hf_repo.py \
     --repo-or-path "${MODEL_PATH}" \
@@ -52,10 +56,10 @@ TRAIN_ARGS=(
     --dino_path facebook/dinov2-with-registers-large
     --llm_path "${MODEL_PATH}"
     --model_path "${MODEL_PATH}"
-    --use_flex True
-    --expected_num_tokens 40960
-    --max_num_tokens 40960
-    --max_num_tokens_per_sample 40960
+    --use_flex "${USE_FLEX}"
+    --expected_num_tokens "${EXPECTED_NUM_TOKENS}"
+    --max_num_tokens "${MAX_NUM_TOKENS}"
+    --max_num_tokens_per_sample "${MAX_NUM_TOKENS_PER_SAMPLE}"
     --wandb_project G2VLM
     --wandb_name "${name}"
     --wandb_offline True

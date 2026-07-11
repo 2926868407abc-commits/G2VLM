@@ -307,25 +307,16 @@ class G2VLM(PreTrainedModel):
         packed_sequence = packed_text_embedding.new_zeros(size=(sequence_length, self.hidden_size))
         packed_sequence[packed_text_indexes] = packed_text_embedding
 
-        if self.config.visual_recon:
+        if nested_attention_masks is None:
             sparse_mask = create_sparse_mask(sample_lens, split_lens, attn_modes, packed_text_embedding.device)
             seqlen = sum(sample_lens)
             block_mask = create_block_mask(
-                sparse_mask, B=1, H=self.num_heads, Q_LEN=seqlen, KV_LEN=seqlen, 
+                sparse_mask, B=1, H=self.num_heads, Q_LEN=seqlen, KV_LEN=seqlen,
                 device=packed_text_embedding.device, BLOCK_SIZE=128, _compile=True
             )
             attention_mask = block_mask
-        else:### regular mask 
-            if nested_attention_masks is None:
-                sparse_mask = create_sparse_mask(sample_lens, split_lens, attn_modes, packed_text_embedding.device)
-                seqlen = sum(sample_lens)
-                block_mask = create_block_mask(
-                    sparse_mask, B=1, H=self.num_heads, Q_LEN=seqlen, KV_LEN=seqlen, 
-                    device=packed_text_embedding.device, BLOCK_SIZE=128, _compile=True
-                )
-                attention_mask = block_mask
-            else:
-                attention_mask = nested_attention_masks
+        else:
+            attention_mask = nested_attention_masks
 
         if self.config.visual_und:
             cu_seqlens = torch.nn.functional.pad(torch.cumsum(vit_token_seqlens, dim=0), (1, 0))

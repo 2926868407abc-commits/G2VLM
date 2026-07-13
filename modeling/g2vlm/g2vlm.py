@@ -86,6 +86,9 @@ class G2VLMConfig(PretrainedConfig):
         use_dinov3=False,
         ce_loss_dino=False,
         train_conf_pi3=False, 
+        pi3_point_weight=1.0,
+        pi3_depth_weight=0.0,
+        pi3_camera_weight=0.2,
         llm_config=None,
         vit_config=None,
         dino_config=None,
@@ -110,6 +113,9 @@ class G2VLMConfig(PretrainedConfig):
         self.pretrain_train_recon = pretrain_train_recon
         self.use_dinov3 = use_dinov3
         self.ce_loss_dino = ce_loss_dino
+        self.pi3_point_weight = pi3_point_weight
+        self.pi3_depth_weight = pi3_depth_weight
+        self.pi3_camera_weight = pi3_camera_weight
 
 
 class G2VLM(PreTrainedModel):
@@ -200,7 +206,12 @@ class G2VLM(PreTrainedModel):
             else:
                 self.global_point_head = None
             
-            self.Pi3Loss = Pi3Loss(self.train_conf_pi3)
+            self.Pi3Loss = Pi3Loss(
+                self.train_conf_pi3,
+                point_weight=config.pi3_point_weight,
+                depth_weight=config.pi3_depth_weight,
+                camera_weight=config.pi3_camera_weight,
+            )
 
             if self.train_conf_pi3:
                 # assert ckpt is not None

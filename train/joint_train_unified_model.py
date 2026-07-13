@@ -301,6 +301,18 @@ class TrainingArguments:
         default=1.0,
         metadata={"help": "Scaling factor for the visual geometry loss term."}
     )
+    pi3_point_weight: float = field(
+        default=1.0,
+        metadata={"help": "Scaling factor for Pi3 local/global point and normal losses."}
+    )
+    pi3_depth_weight: float = field(
+        default=0.0,
+        metadata={"help": "Extra scaling factor for Pi3 depth-only z-channel loss."}
+    )
+    pi3_camera_weight: float = field(
+        default=0.2,
+        metadata={"help": "Scaling factor for Pi3 relative camera-pose loss."}
+    )
     ce_loss_reweighting: bool = field(
         default=False,
         metadata={"help": "Reweight CE loss by token importance (provided via ce_loss_weights)."}
@@ -487,6 +499,9 @@ def main():
         use_dinov3=training_args.use_dinov3,
         ce_loss_dino=training_args.ce_loss_dino,
         train_conf_pi3=training_args.train_conf_pi3,
+        pi3_point_weight=training_args.pi3_point_weight,
+        pi3_depth_weight=training_args.pi3_depth_weight,
+        pi3_camera_weight=training_args.pi3_camera_weight,
         llm_config=llm_config, 
         dino_config=dino_config if training_args.visual_recon else None,
         vit_config=vit_config if training_args.visual_und else None,

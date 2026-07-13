@@ -88,7 +88,7 @@ if "total_mse_tokens = torch.tensor(0" not in train_text:
     raise SystemExit("joint_train_unified_model.py is missing the total_mse_tokens smoke-run fix")
 
 launch_text = (repo / "scripts" / "joint_train_single_node_interndata_n1.sh").read_text()
-for needle in ["PYTHONPATH", "TRAIN_ARGS=(", "resolve_hf_repo.py"]:
+for needle in ["PYTHONPATH", "TRAIN_ARGS=(", "resolve_hf_repo.py", "PI3_DEPTH_WEIGHT", "JOINT_TRAIN_RECON"]:
     if needle not in launch_text:
         raise SystemExit(f"joint_train_single_node_interndata_n1.sh is missing {needle}; sync the latest script")
 

@@ -23,6 +23,7 @@ SYNC_FILES = [
     "scripts/resolve_hf_repo.py",
     "modeling/g2vlm/g2vlm.py",
     "modeling/g2vlm/qwen2vl.py",
+    "modeling/pi3/models/pi3_loss.py",
     "train/joint_train_unified_model.py",
     "train/pretrain_unified_model.py",
     "train/fsdp_utils.py",

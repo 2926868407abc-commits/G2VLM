@@ -47,7 +47,14 @@ scripts/list_interndata_n1_sync_files.py
 scripts/smoke_train_interndata_n1.sh
 scripts/prepare_interndata_n1_replica.sh
 scripts/resolve_hf_repo.py
+modeling/g2vlm/g2vlm.py
+modeling/g2vlm/qwen2vl.py
+modeling/pi3/models/pi3_loss.py
 train/joint_train_unified_model.py
+train/pretrain_unified_model.py
+train/fsdp_utils.py
+g2vlm_utils.py
+requirements.txt
 docs/interndata_n1_replica_training.md
 ```
 
@@ -166,7 +173,46 @@ as the number of parquet files to sample. The converter writes all converted
 rows into one parquet file, so `1` still lets training iterate through all rows
 inside that file.
 
-## 8. Export A Smoke-Test Checkpoint
+## 8. Enable Camera Pose And Depth Loss
+
+The default smoke path keeps `joint_train_recon=False`, so it only checks the
+text-answer CE loss. To train the geometry heads as well, enable recon loss:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 \
+GPUS_PER_NODE=1 \
+TOTAL_STEPS=2 \
+SAVE_EVERY=2 \
+WARMUP_STEPS=1 \
+NUM_WORKERS=1 \
+EXPECTED_NUM_TOKENS=18000 \
+MAX_NUM_TOKENS=20000 \
+MAX_NUM_TOKENS_PER_SAMPLE=20000 \
+USE_FLEX=False \
+JOINT_TRAIN_RECON=True \
+PI3_DEPTH_WEIGHT=0.5 \
+PI3_CAMERA_WEIGHT=0.2 \
+bash scripts/smoke_train_interndata_n1.sh
+```
+
+With `JOINT_TRAIN_RECON=True`, the total geometry loss `dl` includes:
+
+```text
+local_pts_loss   xyz point/depth supervision from depth maps
+depth_loss       extra z-channel depth supervision
+global_pts_loss  global point supervision, when available
+normal_loss      surface-normal consistency from neighboring depth pixels
+camera_loss      weighted relative camera pose loss
+trans_loss       camera relative translation term
+rot_loss         camera relative rotation angle term
+```
+
+`PI3_DEPTH_WEIGHT` controls only the extra z-channel depth term. The original
+`local_pts_loss` already supervises depth through the z coordinate, so increasing
+`PI3_DEPTH_WEIGHT` makes depth matter more. If the run OOMs, keep
+`JOINT_TRAIN_RECON=True` but reduce token limits or the number of frames first.
+
+## 9. Export A Smoke-Test Checkpoint
 
 After the smoke run saves a step directory, create an inference-ready directory
 by combining the trained `model.safetensors` with base model config/tokenizer
@@ -193,7 +239,7 @@ python scripts/infer_interndata_n1_replica_sample.py \
 By default the large `model.safetensors` is symlinked to save disk space. Add
 `--copy-weights` if the exported directory must be self-contained.
 
-## 9. Prepare All Downloaded Replica Scenes
+## 10. Prepare All Downloaded Replica Scenes
 
 After the single-GPU smoke test passes, convert all downloaded
 `replica_d435i/*.tar.gz` scenes:
@@ -208,12 +254,12 @@ For a capped conversion:
 MAX_SAMPLES=1000 bash scripts/prepare_interndata_n1_replica.sh
 ```
 
-## 10. Four-GPU Training
+## 11. Four-GPU Training
 
 After the smoke test and larger conversion pass:
 
 ```bash
-GPUS_PER_NODE=4 TOTAL_STEPS=1000 SAVE_EVERY=200 NUM_WORKERS=2 \
+GPUS_PER_NODE=4 TOTAL_STEPS=1000 SAVE_EVERY=200 NUM_WORKERS=2 JOINT_TRAIN_RECON=True PI3_DEPTH_WEIGHT=0.5 PI3_CAMERA_WEIGHT=0.2 \
 bash scripts/joint_train_single_node_interndata_n1.sh
 ```
 

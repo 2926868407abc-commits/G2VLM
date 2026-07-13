@@ -41,12 +41,19 @@ def angle_diff_vec3(v1: torch.Tensor, v2: torch.Tensor, eps: float = 1e-12):
 # ---------------------------------------------------------------------------
 
 class PointLoss(nn.Module):
-    def __init__(self, local_align_res=4096, train_conf=False, expected_dist_thresh=0.02):
+    def __init__(
+        self,
+        local_align_res=4096,
+        train_conf=False,
+        expected_dist_thresh=0.02,
+        depth_weight=0.0,
+    ):
         super().__init__()
         self.local_align_res = local_align_res
         self.criteria_local = nn.L1Loss(reduction='none')
 
         self.train_conf = train_conf
+        self.depth_weight = depth_weight
         if self.train_conf:
             self.prepare_segformer()
             self.conf_loss_fn = torch.nn.BCEWithLogitsLoss()
@@ -142,6 +149,19 @@ class PointLoss(nn.Module):
 
         # local point loss
         local_pts_loss = self.criteria_local(aligned_local_pts[valid_masks].float(), gt_local_pts[valid_masks].float()) * weights_[valid_masks].float()[..., None]
+
+        # depth-only loss on the z channel. The original local point loss already
+        # supervises xyz; this term lets navigation fine-tuning put extra weight
+        # on metric depth without changing the point-cloud target format.
+        depth_loss = (
+            self.criteria_local(
+                aligned_local_pts[..., 2][valid_masks].float(),
+                gt_local_pts[..., 2][valid_masks].float(),
+            )
+            * weights_[valid_masks].float()
+        ).mean()
+        details['depth_loss'] = depth_loss
+        final_loss += self.depth_weight * depth_loss
 
         # conf loss
         if self.train_conf:
@@ -258,9 +278,15 @@ class Pi3Loss(nn.Module):
     def __init__(
         self,
         train_conf=False,
+        point_weight=1.0,
+        depth_weight=0.0,
+        camera_weight=0.2,
     ):
         super().__init__()
-        self.point_loss = PointLoss(train_conf=train_conf)
+        self.point_weight = point_weight
+        self.depth_weight = depth_weight
+        self.camera_weight = camera_weight
+        self.point_loss = PointLoss(train_conf=train_conf, depth_weight=depth_weight)
         self.camera_loss = CameraLoss()
 
     def prepare_gt(self, gt):
@@ -345,12 +371,14 @@ class Pi3Loss(nn.Module):
 
         # Local Point Loss
         point_loss, point_loss_details, scale = self.point_loss(pred, gt)
-        final_loss += point_loss
+        final_loss += point_loss * self.point_weight
         details.update(point_loss_details)
+        details['point_loss'] = point_loss
 
         # Camera Loss
         camera_loss, camera_loss_details = self.camera_loss(pred, gt, scale)
-        final_loss += camera_loss * 0.2 
+        final_loss += camera_loss * self.camera_weight
+        details['camera_loss'] = camera_loss
         details.update(camera_loss_details)
 
         return final_loss, details

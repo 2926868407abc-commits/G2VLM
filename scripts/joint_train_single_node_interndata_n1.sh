@@ -30,6 +30,11 @@ EXPECTED_NUM_TOKENS=${EXPECTED_NUM_TOKENS:-40960}
 MAX_NUM_TOKENS=${MAX_NUM_TOKENS:-40960}
 MAX_NUM_TOKENS_PER_SAMPLE=${MAX_NUM_TOKENS_PER_SAMPLE:-40960}
 USE_FLEX=${USE_FLEX:-True}
+JOINT_TRAIN_RECON=${JOINT_TRAIN_RECON:-False}
+PRETRAIN_TRAIN_RECON=${PRETRAIN_TRAIN_RECON:-False}
+PI3_POINT_WEIGHT=${PI3_POINT_WEIGHT:-1.0}
+PI3_DEPTH_WEIGHT=${PI3_DEPTH_WEIGHT:-0.0}
+PI3_CAMERA_WEIGHT=${PI3_CAMERA_WEIGHT:-0.2}
 
 MODEL_PATH=$(python scripts/resolve_hf_repo.py \
     --repo-or-path "${MODEL_PATH}" \
@@ -80,8 +85,11 @@ TRAIN_ARGS=(
     --freeze_vit True
     --freeze_und False
     --freeze_recon False
-    --joint_train_recon False
-    --pretrain_train_recon False
+    --joint_train_recon "${JOINT_TRAIN_RECON}"
+    --pretrain_train_recon "${PRETRAIN_TRAIN_RECON}"
+    --pi3_point_weight "${PI3_POINT_WEIGHT}"
+    --pi3_depth_weight "${PI3_DEPTH_WEIGHT}"
+    --pi3_camera_weight "${PI3_CAMERA_WEIGHT}"
     --results_dir "${output_dir}"
     --save_every "${SAVE_EVERY}"
     --total_steps "${TOTAL_STEPS}"

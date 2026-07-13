@@ -1,3 +1,26 @@
+# G2VLM server setup notes
+# ------------------------
+# Tested smoke-train stack: Python 3.10, torch 2.5.1+cu121, CUDA 12.x, flash-attn 2.7.4.post1.
+#
+# Install order matters on a fresh server:
+# 1. Create and activate an isolated env first. If conda is not available, use python3 -m venv.
+# 2. Install torch before this file:
+#      python -m pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu121
+# 3. Install this file:
+#      python -m pip install -r requirements.txt
+# 4. Install flash-attn after torch, without dependencies, so pip does not upgrade torch:
+#      python -m pip install --no-deps https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.4.post1/flash_attn-2.7.4.post1+cu12torch2.5cxx11abiFALSE-cp310-cp310-linux_x86_64.whl
+#
+# Do not upgrade huggingface_hub to 1.x inside this training env. transformers==4.49.0
+# requires huggingface_hub<1.0, and the newer hub CLI can break this stack. Use a
+# separate downloader env if you need a newer `hf` command for dataset download.
+# For HF mirror downloads, set env vars outside pip, for example:
+#      export HF_ENDPOINT=https://hf-mirror.com
+#      export HF_HOME=/mnt/data/wangqq/G2VLM/data/.cache/huggingface
+#      export HF_HUB_ETAG_TIMEOUT=120
+#      export HF_HUB_DOWNLOAD_TIMEOUT=120
+#      export HF_HUB_DISABLE_XET=1  # only when xet/hash or partial-download errors appear
+
 decord==0.6.0
 easydict==1.13
 einops==0.8.1
@@ -17,11 +40,14 @@ Requests==2.32.3
 safetensors==0.4.5
 scipy==1.10.1
 sentencepiece==0.1.99
+tokenizers==0.21.4
 timm
 # torch==2.5.1
 # torchvision==0.20.1
 transformers==4.49.0
-#flash_attn==2.5.8
+# Install flash-attn with the explicit wheel command above; do not install plain
+# flash-attn here, because pip may pull or upgrade torch.
+# flash_attn==2.7.4.post1
 accelerate>=0.34.0
 wandb
 gradio

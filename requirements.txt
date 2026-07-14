@@ -37,6 +37,7 @@ prettytable
 pyarrow==11.0.0
 PyYAML==6.0.2
 Requests==2.32.3
+rootutils
 safetensors==0.4.5
 scipy==1.10.1
 sentencepiece==0.1.99

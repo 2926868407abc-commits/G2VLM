@@ -41,7 +41,11 @@ def iter_remote_files(api, args):
             expand=True,
         )
         for item in items:
-            if getattr(item, "type", None) == "file":
+            item_type = getattr(item, "type", None)
+            class_name = type(item).__name__.lower()
+            if item_type in {"directory", "folder"} or "folder" in class_name:
+                continue
+            if item_type in {None, "file"} or "file" in class_name:
                 yield item
     except Exception as exc:
         raise SystemExit(
@@ -99,8 +103,14 @@ def main():
     missing_or_partial = 0
 
     for item in iter_remote_files(api, args):
-        path = item.path
+        path = getattr(item, "path", None) or getattr(item, "rfilename", None)
+        if not path:
+            continue
         size = getattr(item, "size", None)
+        if size is None:
+            lfs = getattr(item, "lfs", None)
+            if isinstance(lfs, dict):
+                size = lfs.get("size")
         if size is None:
             unknown_size += 1
             continue
@@ -138,6 +148,11 @@ def main():
     print(f"incomplete files: {incomplete_count}")
     print(f"lock files: {lock_count}")
     print(f"unknown-size remote files: {unknown_size}")
+    if total_files == 0:
+        print()
+        print("remote file count is 0, so this result is not usable.")
+        print("Possible causes: network failure, token failure, endpoint issue, or an unsupported huggingface_hub response shape.")
+        sys.exit(3)
     print()
     print(f"remote total size: {human_size(remote_total)}")
     print(f"downloaded complete size: {human_size(downloaded_complete)}")

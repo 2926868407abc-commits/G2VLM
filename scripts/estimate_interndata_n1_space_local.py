@@ -13,15 +13,10 @@ from pathlib import Path
 
 def human(num_bytes):
     value = float(num_bytes)
-    for unit in ["B", "GiB", "TiB"]:
-        if unit == "B" and value < 1024**3:
-            return f"{value:.2f} B"
-        if unit == "GiB" and value < 1024:
-            return f"{value:.2f} GiB"
-        if unit == "TiB":
-            return f"{value:.2f} TiB"
+    for unit in ["B", "KiB", "MiB", "GiB", "TiB", "PiB"]:
+        if value < 1024.0 or unit == "PiB":
+            return f"{value:.2f} {unit}"
         value /= 1024
-    return f"{value:.2f} TiB"
 
 
 def dir_size(path):

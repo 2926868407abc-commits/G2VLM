@@ -40,6 +40,9 @@ data/interleave_datasets/recon_then_und_dataset.py
 data/interleave_datasets/draw_marker.py
 data/draw_marker.py
 scripts/joint_train_single_node_interndata_n1.sh
+scripts/chunk_train_interndata_n1.sh
+scripts/check_interndata_n1_tar_format.py
+scripts/estimate_interndata_n1_space_local.py
 scripts/doctor_interndata_n1_replica.py
 scripts/export_interndata_n1_checkpoint.py
 scripts/infer_interndata_n1_replica_sample.py
@@ -173,7 +176,56 @@ as the number of parquet files to sample. The converter writes all converted
 rows into one parquet file, so `1` still lets training iterate through all rows
 inside that file.
 
-## 8. Enable Camera Pose And Depth Loss
+## 8. Chunked Large Training
+
+For large runs, do not extract all InternData-N1 tar files at once. The converted
+parquet stores RGB/depth file paths, so training needs the extracted images to
+exist while that batch is training. Use the chunked launcher to extract a small
+set of tar files, convert them, train to the next checkpoint, then delete only
+that temporary extracted chunk:
+
+```bash
+cd /data/wqq/G2VLM
+source /data/wqq/G2VLM/env.sh
+
+tmux new -s g2vlm_chunk_train
+```
+
+Inside tmux:
+
+```bash
+cd /data/wqq/G2VLM
+source /data/wqq/G2VLM/env.sh
+
+CUDA_VISIBLE_DEVICES=0 \
+GPUS_PER_NODE=1 \
+SUBSETS="3dfront_d435i gibson_d435i hm3d_d435i" \
+TARS_PER_CHUNK=1 \
+STEPS_PER_CHUNK=200 \
+FRAMES_PER_SAMPLE=8 \
+NUM_WORKERS=1 \
+bash scripts/chunk_train_interndata_n1.sh
+```
+
+The script keeps original `.tar.gz` files, deletes only temporary extracted
+chunks under `${DATA_ROOT}/InternData-N1-extracted-chunks`, and resumes from the
+same checkpoint directory:
+
+```text
+./checkpoints/g2vlm_interndata_n1_chunked
+```
+
+For a quick trial, add `MAX_CHUNKS=1 STEPS_PER_CHUNK=20`. If the GPU reports a
+FlexAttention/shared-memory error, retry with:
+
+```bash
+USE_FLEX=False \
+EXPECTED_NUM_TOKENS=18000 \
+MAX_NUM_TOKENS=20000 \
+MAX_NUM_TOKENS_PER_SAMPLE=20000
+```
+
+## 9. Enable Camera Pose And Depth Loss
 
 The default smoke path keeps `joint_train_recon=False`, so it only checks the
 text-answer CE loss. To train the geometry heads as well, enable recon loss:
@@ -212,7 +264,7 @@ rot_loss         camera relative rotation angle term
 `PI3_DEPTH_WEIGHT` makes depth matter more. If the run OOMs, keep
 `JOINT_TRAIN_RECON=True` but reduce token limits or the number of frames first.
 
-## 9. Export A Smoke-Test Checkpoint
+## 10. Export A Smoke-Test Checkpoint
 
 After the smoke run saves a step directory, create an inference-ready directory
 by combining the trained `model.safetensors` with base model config/tokenizer

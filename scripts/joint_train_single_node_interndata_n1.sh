@@ -35,6 +35,11 @@ PRETRAIN_TRAIN_RECON=${PRETRAIN_TRAIN_RECON:-False}
 PI3_POINT_WEIGHT=${PI3_POINT_WEIGHT:-1.0}
 PI3_DEPTH_WEIGHT=${PI3_DEPTH_WEIGHT:-0.0}
 PI3_CAMERA_WEIGHT=${PI3_CAMERA_WEIGHT:-0.2}
+AUTO_RESUME=${AUTO_RESUME:-False}
+RESUME_MODEL_ONLY=${RESUME_MODEL_ONLY:-True}
+RUN_NAME=${RUN_NAME:-}
+CHECKPOINT_DIR=${CHECKPOINT_DIR:-}
+OUTPUT_DIR=${OUTPUT_DIR:-}
 
 MODEL_PATH=$(python scripts/resolve_hf_repo.py \
     --repo-or-path "${MODEL_PATH}" \
@@ -48,10 +53,15 @@ PRETRAINED_CHECKPOINT=$(python scripts/resolve_hf_repo.py \
     --required model.safetensors)
 echo "[train] MODEL_PATH=${MODEL_PATH}"
 echo "[train] PRETRAINED_CHECKPOINT=${PRETRAINED_CHECKPOINT}"
+RESUME_FROM=${RESUME_FROM:-${PRETRAINED_CHECKPOINT}}
 
-name="g2vlm_interndata_n1_replica_${GPUS_PER_NODE}g_$(date +%Y%m%d_%H%M%S)"
-output_dir="./checkpoints/${name}/"
-checkpoint_dir="./checkpoints/${name}"
+if [ -n "${RUN_NAME}" ]; then
+    name="${RUN_NAME}"
+else
+    name="g2vlm_interndata_n1_replica_${GPUS_PER_NODE}g_$(date +%Y%m%d_%H%M%S)"
+fi
+output_dir=${OUTPUT_DIR:-"./checkpoints/${name}/"}
+checkpoint_dir=${CHECKPOINT_DIR:-"./checkpoints/${name}"}
 mkdir -p "${output_dir}" "${checkpoint_dir}"
 
 TRAIN_ARGS=(
@@ -72,11 +82,11 @@ TRAIN_ARGS=(
     --checkpoint_dir "${checkpoint_dir}"
     --llm_qk_norm True
     --finetune_from_hf True
-    --auto_resume False
-    --resume-model-only True
+    --auto_resume "${AUTO_RESUME}"
+    --resume-model-only "${RESUME_MODEL_ONLY}"
     --finetune-from-ema False
     --enable_ema_model False
-    --resume_from "${PRETRAINED_CHECKPOINT}"
+    --resume_from "${RESUME_FROM}"
     --finetune_dino_from_hf False
     --copy_init_moe False
     --visual_und True

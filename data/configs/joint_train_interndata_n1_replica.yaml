@@ -11,4 +11,5 @@ recon_then_und:
   is_mandatory: True
   num_used_data:
   - 1
+  resume_data_status: False
   weight: 1

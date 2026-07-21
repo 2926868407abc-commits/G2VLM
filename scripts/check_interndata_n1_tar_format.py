@@ -22,7 +22,11 @@ def choose_members(tar):
     normalized = [name.rstrip("/") for name in names]
     meta_episodes = [n for n in normalized if n.endswith("/meta/episodes.jsonl") or n == "meta/episodes.jsonl"]
     meta_tasks = [n for n in normalized if n.endswith("/meta/tasks.jsonl") or n == "meta/tasks.jsonl"]
-    data_parquets = [n for n in normalized if "/data/episode_" in n and n.endswith(".parquet")]
+    data_parquets = [
+        n
+        for n in normalized
+        if "/data/" in n and Path(n).name.startswith("episode_") and n.endswith(".parquet")
+    ]
     rgb_files = [n for n in normalized if "/observation.images.rgb/" in n and n.lower().endswith((".jpg", ".png"))]
     depth_files = [n for n in normalized if "/observation.images.depth/" in n and n.lower().endswith((".png", ".jpg"))]
     return {

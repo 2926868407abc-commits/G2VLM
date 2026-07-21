@@ -18,6 +18,7 @@ INSTRUCTION_KEYS = (
     "sum_instruction",
     "instruction",
     "language_instruction",
+    "task",
 )
 
 
@@ -284,7 +285,7 @@ def build_answer(instruction, final_pose, final_action, goal_pixel, goal_pixel_i
     )
 
 
-def convert_scene(scene_dir, frames_per_sample):
+def convert_scene(scene_dir, frames_per_sample, scene_name, dataset_name):
     episodes = read_jsonl(scene_dir / "meta" / "episodes.jsonl")
     episodes_by_index = {
         int(item["episode_index"]): item
@@ -353,8 +354,8 @@ def convert_scene(scene_dir, frames_per_sample):
                 {
                     "question": question,
                     "answer": build_answer(instruction, final_pose, final_action, goal_pixel, goal_pixel_img_idx),
-                    "scene_name": "replica",
-                    "dataset_name": "spar_interndata_n1_replica_d435i",
+                    "scene_name": scene_name,
+                    "dataset_name": dataset_name,
                     "image_list": image_list,
                     "depth_list": depth_list,
                     "poses": poses,
@@ -382,6 +383,9 @@ def main():
     parser.add_argument("--frames-per-sample", type=int, default=8)
     parser.add_argument("--row-group-size", type=int, default=32)
     parser.add_argument("--max-samples", type=int, default=0)
+    parser.add_argument("--scene-name", default="replica")
+    parser.add_argument("--dataset-name", default="spar_interndata_n1_replica_d435i")
+    parser.add_argument("--output-name", default="interndata_n1_replica_d435i")
     args = parser.parse_args()
 
     input_root = Path(args.input_root)
@@ -399,7 +403,7 @@ def main():
         if not (scene_dir / "meta" / "episodes.jsonl").exists():
             continue
         before = len(rows)
-        rows.extend(convert_scene(scene_dir, args.frames_per_sample))
+        rows.extend(convert_scene(scene_dir, args.frames_per_sample, args.scene_name, args.dataset_name))
         print(f"[convert] rows from {scene_dir.name}: {len(rows) - before}")
         if args.max_samples and len(rows) >= args.max_samples:
             rows = rows[: args.max_samples]
@@ -408,7 +412,7 @@ def main():
     if not rows:
         raise RuntimeError(f"No rows converted from {input_root}")
 
-    parquet_path = (parquet_dir / "interndata_n1_replica_d435i.parquet").resolve()
+    parquet_path = (parquet_dir / f"{args.output_name}.parquet").resolve()
     table = pa.Table.from_pylist(rows)
     pq.write_table(table, parquet_path, row_group_size=args.row_group_size)
 

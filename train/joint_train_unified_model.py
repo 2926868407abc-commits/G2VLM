@@ -783,7 +783,14 @@ def main():
             ###########################
 
             if (training_args.visual_recon and training_args.joint_train_recon) or training_args.pretrain_train_recon:
-                vg = loss_dict["vg"]
+                vg = loss_dict.get("vg", None)
+                if vg is None:
+                    vg = loss_dict.get("dl", None)
+                if vg is None:
+                    raise KeyError(
+                        "Expected geometry loss key 'vg' or 'dl' in loss_dict, "
+                        f"got keys: {sorted(loss_dict.keys())}"
+                    )
                 total_vg_tokens = torch.tensor(len(data['packed_dino_token_indexes']), device=device)
                 dist.all_reduce(total_vg_tokens, op=dist.ReduceOp.SUM)
                 if training_args.joint_train_recon or training_args.pretrain_train_recon:

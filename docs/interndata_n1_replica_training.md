@@ -45,6 +45,7 @@ scripts/check_interndata_n1_tar_format.py
 scripts/estimate_interndata_n1_space_local.py
 scripts/summarize_interndata_n1_training_metrics.py
 scripts/evaluate_interndata_n1_goal_predictions.py
+scripts/evaluate_interndata_n1_checkpoint.py
 scripts/doctor_interndata_n1_replica.py
 scripts/export_interndata_n1_checkpoint.py
 scripts/infer_interndata_n1_replica_sample.py
@@ -209,6 +210,18 @@ NUM_WORKERS=1 \
 bash scripts/chunk_train_interndata_n1.sh
 ```
 
+Chunked training enables geometry loss by default:
+
+```text
+JOINT_TRAIN_RECON=True
+PI3_POINT_WEIGHT=1.0
+PI3_DEPTH_WEIGHT=0.5
+PI3_CAMERA_WEIGHT=0.2
+```
+
+Override these environment variables only when intentionally running a text-only
+ablation.
+
 The script keeps original `.tar.gz` files, deletes only temporary extracted
 chunks under `${DATA_ROOT}/InternData-N1-extracted-chunks`, and resumes from the
 same checkpoint directory:
@@ -259,6 +272,15 @@ python scripts/evaluate_interndata_n1_goal_predictions.py \
 The key validation metrics are `image_index_acc`, `pixel_l2_mean`,
 `pixel_l2_median`, and `success@50/100/150`. These should improve on held-out
 samples as checkpoints advance.
+
+For a direct checkpoint-to-metrics run on a held-out parquet:
+
+```bash
+python scripts/evaluate_interndata_n1_checkpoint.py \
+  --parquet data/g2vlm_interndata_n1/chunks/<heldout_chunk>/parquets/<file>.parquet \
+  --model-path checkpoints/g2vlm_interndata_n1_chunked/hf_export_0000200 \
+  --max-rows 32
+```
 
 ## 9. Enable Camera Pose And Depth Loss
 

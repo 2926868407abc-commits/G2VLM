@@ -20,6 +20,7 @@ SYNC_FILES = [
     "scripts/estimate_interndata_n1_space_local.py",
     "scripts/summarize_interndata_n1_training_metrics.py",
     "scripts/evaluate_interndata_n1_goal_predictions.py",
+    "scripts/evaluate_interndata_n1_checkpoint.py",
     "scripts/doctor_interndata_n1_replica.py",
     "scripts/export_interndata_n1_checkpoint.py",
     "scripts/infer_interndata_n1_replica_sample.py",

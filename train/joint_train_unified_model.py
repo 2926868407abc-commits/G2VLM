@@ -938,6 +938,28 @@ def main():
             epoch_step += 1
               
             if curr_step >= training_args.total_steps:
+                if curr_step > 0 and curr_step % training_args.save_every != 0:
+                    if dist.get_rank() == 0:
+                        gather_list = [None] * dist.get_world_size()
+                    else:
+                        gather_list = None
+                    dist.gather_object(data_status, gather_list, dst=0)
+
+                    FSDPCheckpoint.fsdp_save_ckpt(
+                        ckpt_dir=training_args.checkpoint_dir,
+                        train_steps=curr_step,
+                        model=fsdp_model,
+                        ema_model=ema_model,
+                        optimizer=optimizer,
+                        scaler=scaler,
+                        scheduler=scheduler,
+                        logger=logger,
+                        fsdp_config=fsdp_config,
+                        data_status=gather_list,
+                    )
+
+                    save_latest_checkpoints(training_args.checkpoint_dir, keep_latest=2)
+
                 logger.info("Done!")
                 if dist.get_rank() == 0:
                     wandb.finish()

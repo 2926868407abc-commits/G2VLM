@@ -21,6 +21,9 @@ DEVICE=${DEVICE:-cuda}
 LOAD_IMG_SIZE=${LOAD_IMG_SIZE:-518}
 ALIGN_DEPTH_TO_SENSOR=${ALIGN_DEPTH_TO_SENSOR:-median}
 SCENES=${SCENES:-}
+SCENE_NAME=${SCENE_NAME:-replica}
+DATASET_NAME=${DATASET_NAME:-spar_interndata_n1_replica_d435i_vggt_gt}
+OUTPUT_NAME=${OUTPUT_NAME:-interndata_n1_replica_d435i_vggt_gt}
 
 mkdir -p "${EXTRACT_ROOT}" "${OUTPUT_ROOT}"
 
@@ -58,6 +61,9 @@ convert_args=(
     --device "${DEVICE}"
     --load-img-size "${LOAD_IMG_SIZE}"
     --align-depth-to-sensor "${ALIGN_DEPTH_TO_SENSOR}"
+    --scene-name "${SCENE_NAME}"
+    --dataset-name "${DATASET_NAME}"
+    --output-name "${OUTPUT_NAME}"
 )
 
 if [ "${MAX_SAMPLES}" != "0" ]; then
@@ -72,6 +78,6 @@ fi
 python data/preprocessing/convert_interndata_n1_replica_with_vggt_gt.py "${convert_args[@]}"
 
 echo "[prepare-vggt] done"
-echo "[prepare-vggt] parquet: ${OUTPUT_ROOT}/parquets/interndata_n1_replica_d435i_vggt_gt.parquet"
+echo "[prepare-vggt] parquet: ${OUTPUT_ROOT}/parquets/${OUTPUT_NAME}.parquet"
 echo "[prepare-vggt] parquet_info: ${OUTPUT_ROOT}/parquet_info.json"
 echo "[prepare-vggt] train with: export G2VLM_INTERNDATA_N1_REPLICA_ROOT=${OUTPUT_ROOT}"

@@ -267,7 +267,14 @@ def infer_vggt(
     return original_depths, depth_conf_np, list(poses_c2w), original_intrinsics, image_size_hw
 
 
-def rows_from_scenes(input_root: Path, scenes: list[str] | None, frames_per_sample: int, max_samples: int) -> list[dict[str, Any]]:
+def rows_from_scenes(
+    input_root: Path,
+    scenes: list[str] | None,
+    frames_per_sample: int,
+    max_samples: int,
+    scene_name: str,
+    dataset_name: str,
+) -> list[dict[str, Any]]:
     scene_dirs = discover_scene_dirs(input_root, scenes)
     print(f"[vggt-gt] discovered scene dirs: {len(scene_dirs)}")
     for scene_dir in scene_dirs:
@@ -278,7 +285,7 @@ def rows_from_scenes(input_root: Path, scenes: list[str] | None, frames_per_samp
         if not (scene_dir / "meta" / "episodes.jsonl").exists():
             continue
         before = len(rows)
-        rows.extend(convert_scene(scene_dir, frames_per_sample))
+        rows.extend(convert_scene(scene_dir, frames_per_sample, scene_name, dataset_name))
         print(f"[vggt-gt] base rows from {scene_dir.name}: {len(rows) - before}")
         if max_samples and len(rows) >= max_samples:
             rows = rows[:max_samples]
@@ -286,11 +293,11 @@ def rows_from_scenes(input_root: Path, scenes: list[str] | None, frames_per_samp
     return rows
 
 
-def write_outputs(rows: list[dict[str, Any]], output_root: Path, row_group_size: int) -> None:
+def write_outputs(rows: list[dict[str, Any]], output_root: Path, row_group_size: int, output_name: str) -> None:
     parquet_dir = output_root / "parquets"
     parquet_dir.mkdir(parents=True, exist_ok=True)
 
-    parquet_path = (parquet_dir / "interndata_n1_replica_d435i_vggt_gt.parquet").resolve()
+    parquet_path = (parquet_dir / f"{output_name}.parquet").resolve()
     table = pa.Table.from_pylist(rows)
     pq.write_table(table, parquet_path, row_group_size=row_group_size)
 
@@ -339,6 +346,9 @@ def main() -> None:
     parser.add_argument("--align-depth-to-sensor", choices=("median", "none"), default="median")
     parser.add_argument("--min-valid-depth-pixels", type=int, default=256)
     parser.add_argument("--max-depth-m", type=float, default=65.0)
+    parser.add_argument("--scene-name", default="replica")
+    parser.add_argument("--dataset-name", default="spar_interndata_n1_replica_d435i_vggt_gt")
+    parser.add_argument("--output-name", default="interndata_n1_replica_d435i_vggt_gt")
     args = parser.parse_args()
 
     input_root = Path(args.input_root)
@@ -346,7 +356,14 @@ def main() -> None:
     vggt_depth_root = output_root / "vggt_gt" / "depth_png"
     output_root.mkdir(parents=True, exist_ok=True)
 
-    base_rows = rows_from_scenes(input_root, args.scenes, args.frames_per_sample, args.max_samples)
+    base_rows = rows_from_scenes(
+        input_root,
+        args.scenes,
+        args.frames_per_sample,
+        args.max_samples,
+        args.scene_name,
+        args.dataset_name,
+    )
     if not base_rows:
         raise RuntimeError(f"No base rows converted from {input_root}")
 
@@ -409,7 +426,7 @@ def main() -> None:
         new_row["metadata"] = repr(metadata)
         converted_rows.append(new_row)
 
-    write_outputs(converted_rows, output_root, args.row_group_size)
+    write_outputs(converted_rows, output_root, args.row_group_size, args.output_name)
 
 
 if __name__ == "__main__":

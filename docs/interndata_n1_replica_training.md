@@ -43,6 +43,8 @@ scripts/joint_train_single_node_interndata_n1.sh
 scripts/chunk_train_interndata_n1.sh
 scripts/check_interndata_n1_tar_format.py
 scripts/estimate_interndata_n1_space_local.py
+scripts/summarize_interndata_n1_training_metrics.py
+scripts/evaluate_interndata_n1_goal_predictions.py
 scripts/doctor_interndata_n1_replica.py
 scripts/export_interndata_n1_checkpoint.py
 scripts/infer_interndata_n1_replica_sample.py
@@ -224,6 +226,39 @@ EXPECTED_NUM_TOKENS=18000 \
 MAX_NUM_TOKENS=20000 \
 MAX_NUM_TOKENS_PER_SAMPLE=20000
 ```
+
+To inspect whether training losses are still falling or are flattening out:
+
+```bash
+python scripts/summarize_interndata_n1_training_metrics.py \
+  --log checkpoints/g2vlm_interndata_n1_chunked/log.txt \
+  --window 20
+```
+
+This labels each logged loss as `still-decreasing`, `flat/converging`, or
+`getting-worse` by comparing the latest window to the previous window. Loss
+convergence alone only proves the model fits the training objective; it does not
+prove the navigation ability generalizes.
+
+To measure the pixel-goal ability, export a checkpoint, run inference on held-out
+converted samples, then score the saved JSON files:
+
+```bash
+python scripts/export_interndata_n1_checkpoint.py \
+  --checkpoint checkpoints/g2vlm_interndata_n1_chunked/0000200
+
+python scripts/infer_interndata_n1_replica_sample.py \
+  --parquet data/g2vlm_interndata_n1/chunks/<heldout_chunk>/parquets/<file>.parquet \
+  --row 0 \
+  --model-path checkpoints/g2vlm_interndata_n1_chunked/hf_export_0000200
+
+python scripts/evaluate_interndata_n1_goal_predictions.py \
+  data/g2vlm_interndata_n1/chunks/<heldout_chunk>/inference_samples
+```
+
+The key validation metrics are `image_index_acc`, `pixel_l2_mean`,
+`pixel_l2_median`, and `success@50/100/150`. These should improve on held-out
+samples as checkpoints advance.
 
 ## 9. Enable Camera Pose And Depth Loss
 
